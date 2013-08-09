@@ -640,7 +640,7 @@ func (w *Whisper) propagate(timestamp uint32, higher ArchiveInfo, lower ArchiveI
 
 	var neighborPoints []Point
 	currentInterval := lowerIntervalStart
-	for i := 0; i < len(points); i += 2 {
+	for i := 0; i < len(points); i += 1 {
 		if points[i].Timestamp == currentInterval {
 			neighborPoints = append(neighborPoints, points[i])
 		}
