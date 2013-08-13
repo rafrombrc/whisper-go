@@ -169,17 +169,14 @@ type reverseArchive struct{ archive }
 // sort.Interface
 func (r reverseArchive) Less(i, j int) bool { return r.archive.Less(j, i) }
 
-// some sizes used fo
-var pointSize, metadataSize, archiveSize uint32
+var (
+	pointSize       = uint32(binary.Size(Point{}))
+	metadataSize    = uint32(binary.Size(Metadata{}))
+	archiveInfoSize = uint32(binary.Size(ArchiveInfo{}))
+)
 
 // a regular expression matching a precision string such as 120y
 var precisionRegexp = regexp.MustCompile("^(\\d+)([smhdwy]?)")
-
-func init() {
-	pointSize = uint32(binary.Size(Point{}))
-	metadataSize = uint32(binary.Size(Metadata{}))
-	archiveSize = uint32(binary.Size(ArchiveInfo{}))
-}
 
 // Read the header of a whisper database
 func readHeader(buf io.ReadSeeker) (header Header, err error) {
@@ -299,6 +296,11 @@ type CreateOptions struct {
 	Sparse bool
 }
 
+// headerSize calculates the size of a header with n archives
+func headerSize(n int) uint32 {
+	return metadataSize + (archiveInfoSize * uint32(n))
+}
+
 // Create a new database at the given filepath.
 func Create(path string, archives []ArchiveInfo, options CreateOptions) (*Whisper, error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
@@ -331,8 +333,8 @@ func Create(path string, archives []ArchiveInfo, options CreateOptions) (*Whispe
 		return nil, err
 	}
 
-	headerSize := metadataSize + (archiveSize * uint32(len(archives)))
-	archiveOffsetPointer := headerSize
+	hSize := headerSize(len(archives))
+	archiveOffsetPointer := hSize
 
 	for _, archive := range archives {
 		archive.Offset = archiveOffsetPointer
@@ -343,10 +345,10 @@ func Create(path string, archives []ArchiveInfo, options CreateOptions) (*Whispe
 	}
 
 	if options.Sparse {
-		file.Seek(int64(archiveOffsetPointer-headerSize-1), 0)
+		file.Seek(int64(archiveOffsetPointer-hSize-1), 0)
 		file.Write([]byte{0})
 	} else {
-		remaining := archiveOffsetPointer - headerSize
+		remaining := archiveOffsetPointer - hSize
 		chunkSize := uint32(16384)
 		buf := make([]byte, chunkSize)
 		for remaining > chunkSize {
@@ -498,6 +500,7 @@ func (w *Whisper) FetchUntil(from, until uint32) (interval Interval, points []Po
 	}
 	if from > until {
 		err = errors.New("from time is not less than until time")
+		return
 	}
 	if until > now {
 		until = now
